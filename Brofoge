@@ -1,0 +1,72 @@
+# main.py — BroForge AI Agents — ONE FILE, SHIPS ANYWHERE
+import os
+import time
+import json
+import requests
+from datetime import datetime
+
+CLAUDE_API_KEY = os.getenv("CLAUDE_API_KEY")
+CLAUDE_MODEL = "claude-3-5-sonnet-20241022"
+BASE_URL = "https://api.anthropic.com/v1/messages"
+
+headers = {
+    "x-api-key": CLAUDE_API_KEY,
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json"
+}
+
+MATCHMAKER_PROMPT = """
+You are BroForge Matchmaker. Users: 35+ US men, dads, hustlers.
+Input: list of user dicts with id, location, life_stage, hobbies, pain_points, availability.
+Output ONLY valid JSON:
+{
+  "pairs": [[id1, id2, "reason"]],
+  "trios": [[id1, id2, id3, "reason"]],
+  "quest_idea": "20-word micro-adventure"
+}
+NO explanations.
+"""
+
+QUEST_PROMPT = """
+Input: two user profiles + reason.
+Output ONLY JSON:
+{
+  "quest_title": "8 words max",
+  "location": "real Miami spot",
+  "duration_min": 30,
+  "when": "next slot e.g. Thu 7pm",
+  "icebreaker": "20-sec voice script",
+  "expire_hours": 24
+}
+"""
+
+def claude(message: str, system: str):
+    payload = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": 1024,
+        "temperature": 0.3,
+        "system": system,
+        "messages": [{"role": "user", "content": message}]
+    }
+    r = requests.post(BASE_URL, headers=headers, json=payload)
+    r.raise_for_status()
+    return r.json()["content"][0]["text"]
+
+users = [
+    {"id": 1, "name": "You", "location": "Miami", "life_stage": "dad + AI PM", "hobbies": "bourbon, building", "pain_points": "no real talks", "availability": "Thu-Fri after 6pm"},
+    {"id": 2, "name": "TestBro", "location": "Miami", "life_stage": "dad + founder", "hobbies": "golf, startups", "pain_points": "surface chats", "availability": "Wed-Thu after 7pm"}
+]
+
+def run():
+    print(f"[{datetime.now().strftime('%H:%M')}] Swarm running...")
+    matches = json.loads(claude(json.dumps(users), MATCHMAKER_PROMPT))
+    print("Matches:", matches)
+    for pair in matches.get("pairs", [])[:1]:
+        u1 = next(u for u in users if u["id"] == pair[0])
+        u2 = next(u for u in users if u["id"] == pair[1])
+        context = f"U1: {json.dumps(u1)}\nU2: {json.dumps(u2)}\nReason: {pair[2]}"
+        quest = json.loads(claude(context, QUEST_PROMPT))
+        print("QUEST GENERATED:", quest)
+
+if __name__ == "__main__":
+    run()
